@@ -1,0 +1,14 @@
+[project]
+name = "appbuilder"
+version = "0.0.1"
+requires-python = ">=3.12"
+dependencies = ["jsonschema>=4.20"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["appbuilder", "appbuilder.orchestrator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
