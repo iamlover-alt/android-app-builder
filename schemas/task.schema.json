@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task",
+  "type": "object",
+  "required": [
+    "id",
+    "agent",
+    "inputs",
+    "outputs",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "agent": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "running",
+        "blocked",
+        "done",
+        "escalated"
+      ]
+    },
+    "fix_rounds": {
+      "type": "integer",
+      "maximum": 5
+    }
+  }
+}

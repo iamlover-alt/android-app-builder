@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TestReport",
+  "type": "object",
+  "required": [
+    "task_id",
+    "build_green",
+    "criteria"
+  ],
+  "properties": {
+    "task_id": {
+      "type": "string"
+    },
+    "build_green": {
+      "type": "boolean"
+    },
+    "fix_rounds": {
+      "type": "integer",
+      "maximum": 5
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "story_id",
+          "line",
+          "passed"
+        ],
+        "properties": {
+          "story_id": {
+            "type": "string"
+          },
+          "line": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

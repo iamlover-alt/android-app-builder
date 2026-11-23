@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ModuleGraph",
+  "type": "object",
+  "required": [
+    "modules"
+  ],
+  "properties": {
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "layer",
+          "depends_on"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "layer": {
+            "enum": [
+              "app",
+              "ui",
+              "domain",
+              "data",
+              "core"
+            ]
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "adrs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}
