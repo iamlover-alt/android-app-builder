@@ -19,7 +19,7 @@ Each day: read this file, do that day's work on a branch `day-N`, run tests, upd
 | docs-release | README, ADRs, release notes, v0.1.0 tag (Day 7) |
 
 ## Checklist
-- [ ] Day 1: Orchestrator runtime (`appbuilder/orchestrator/`): task DAG, artifact-ready triggers, JSON-schema validation of handoffs, 5-round fix cap with escalation, run log. Unit tests.
+- [x] Day 1: Orchestrator runtime (`appbuilder/orchestrator/`): task DAG, artifact-ready triggers, JSON-schema validation of handoffs, 5-round fix cap with escalation, run log. Unit tests.
 - [ ] Day 2: Tool layer (`appbuilder/tools/`): edit-then-lint with rollback, gradle-run, emulator-run, behind interfaces with fakes. Sandbox `Dockerfile` (JDK 17+, Android SDK API 36, warm Gradle daemon).
 - [ ] Day 3: Agent runner (`appbuilder/agents/`) calling the Anthropic API with each agent's spec as system prompt; implement Product Strategist and Android Architect end to end (PRD and module graph validate against schemas).
 - [ ] Day 4: UI Engineer, Domain/Data Engineer, Build Doctor with failure memory (error signature -> fix store).
@@ -28,4 +28,9 @@ Each day: read this file, do that day's work on a branch `day-N`, run tests, upd
 - [ ] Day 7: Hardening (budget caps, secrets never in prompts, dependency allowlist), quickstart README, benchmark report `docs/benchmark-report-v0.1.md`, tag `v0.1.0`.
 
 ## Known gaps
-(append here)
+- Day 1: Gates (spec, design, release) are not in the runtime yet; they belong to Day 6 with the CLI. Human approval for release is therefore not enforced by code yet.
+- Day 1: Tasks run sequentially, one at a time; no parallel execution, budgets or token/cost caps (Day 7).
+- Day 1: Artifacts are validated only if a schema exists in schemas/ (prd, module-graph, task, test-report); other artifacts must be declared `opaque`. Only the shape is checked, not semantic correctness.
+- Day 1: Nothing exercised against real agents or the Anthropic API; tests use fake agents only. No Android SDK, emulator or Play verification happened.
+- Day 1: The cloud sandbox had no `add_repo`/`register_repo_root` tools; the repo was already cloned, so setup was skipped. Dev default Python is 3.13; tests were also run on 3.12.3 in a venv (ADR 0002 target) and pass.
+- Day 1: Critic and security review agents were not run in this unattended session; branch is unreviewed.
