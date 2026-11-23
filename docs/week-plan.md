@@ -6,6 +6,18 @@ Stack decision: see docs/decisions/0002-python-orchestrator.md.
 
 Each day: read this file, do that day's work on a branch `day-N`, run tests, update the checklist and docs/failures.md, merge to main, push. If something cannot run in the cloud sandbox (no Android SDK, no emulator, no network), build it behind an interface with a fake, record the gap under "Known gaps" below, and continue.
 
+## Who does what
+| Agent (.claude/agents/) | Owns |
+| --- | --- |
+| builder-lead | Plans each day, delegates, integrates, ticks the checklist, pushes |
+| runtime-engineer | Orchestrator runtime, CLI, gates (Days 1, 6) |
+| sandbox-engineer | Tool layer, sandbox Dockerfile, app templates (Day 2) |
+| agent-engineer | Agent runner and agents, failure memory, context packs (Days 3, 4, 5) |
+| benchmark-engineer | Benchmark harness, run records, failure triage (Days 5, 6, 7) |
+| critic-reviewer | Reviews every branch; blocks only with evidence |
+| security-reviewer | Secrets, subprocesses, dependencies, prompt injection (all days, hardening on Day 7) |
+| docs-release | README, ADRs, release notes, v0.1.0 tag (Day 7) |
+
 ## Checklist
 - [ ] Day 1: Orchestrator runtime (`appbuilder/orchestrator/`): task DAG, artifact-ready triggers, JSON-schema validation of handoffs, 5-round fix cap with escalation, run log. Unit tests.
 - [ ] Day 2: Tool layer (`appbuilder/tools/`): edit-then-lint with rollback, gradle-run, emulator-run, behind interfaces with fakes. Sandbox `Dockerfile` (JDK 17+, Android SDK API 36, warm Gradle daemon).
