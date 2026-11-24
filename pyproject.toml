@@ -8,7 +8,7 @@ dependencies = ["jsonschema>=4.20"]
 dev = ["pytest>=8"]
 
 [tool.setuptools]
-packages = ["appbuilder", "appbuilder.orchestrator"]
+packages = ["appbuilder", "appbuilder.orchestrator", "appbuilder.tools"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
