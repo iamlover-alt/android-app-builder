@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CodeChange",
+  "type": "object",
+  "required": ["module", "files"],
+  "properties": {
+    "module": {"type": "string"},
+    "summary": {"type": "string"},
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "content"],
+        "properties": {
+          "path": {"type": "string"},
+          "content": {"type": "string"}
+        }
+      }
+    },
+    "db_version": {"type": "integer", "minimum": 1}
+  }
+}

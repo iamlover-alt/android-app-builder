@@ -1,0 +1,7 @@
+{"id": "prd-todo", "app_name": "TodoNow", "min_sdk": 26, "target_sdk": 36,
+ "stories": [
+  {"id": "s1", "as_a": "user", "i_want": "to add a task", "so_that": "I remember it",
+   "acceptance": ["Given the list is empty", "When I add 'Buy milk'", "Then the list shows 'Buy milk'"]},
+  {"id": "s2", "as_a": "user", "i_want": "to complete a task", "so_that": "I see progress",
+   "acceptance": ["Given a task exists", "When I tap its checkbox", "Then it is shown as done"]}],
+ "mvp_cut": ["s1", "s2"], "budgets": {"cold_start_ms": 800, "apk_mb": 15}}

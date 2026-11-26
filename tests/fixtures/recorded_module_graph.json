@@ -1,0 +1,7 @@
+{"modules": [
+  {"path": ":app", "layer": "app", "depends_on": [":feature:tasks", ":data", ":domain", ":core"]},
+  {"path": ":feature:tasks", "layer": "ui", "depends_on": [":domain", ":core"]},
+  {"path": ":domain", "layer": "domain", "depends_on": [":core"]},
+  {"path": ":data", "layer": "data", "depends_on": [":domain", ":core"]},
+  {"path": ":core", "layer": "core", "depends_on": []}],
+ "adrs": ["Hilt for DI", "Room for local storage", "Single-activity Compose navigation"]}
