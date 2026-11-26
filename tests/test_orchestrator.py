@@ -23,7 +23,7 @@ def good_agents():
 
 
 def test_registry_loads_all_schemas():
-    assert {"prd", "module-graph", "task", "test-report"} <= set(SchemaRegistry().names())
+    assert {"prd", "module-graph", "task", "test-report", "code-change", "build-fix"} <= set(SchemaRegistry().names())
 
 
 def test_happy_path_runs_in_dependency_order_and_logs():

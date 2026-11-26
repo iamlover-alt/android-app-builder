@@ -89,7 +89,7 @@ class AgentRunner:
         user = d.build_user(inputs)
         if feedback:
             user += ("\n\nYour previous reply was rejected. Fix every error and reply with the full corrected JSON:\n"
-                     + "\n".join(f"- {clip(e)}" for e in feedback))
+                     + wrap_untrusted("feedback", "\n".join(f"- {clip(e)}" for e in feedback)))
         self.log.emit("model_call", agent=d.name, artifact=d.artifact, retry=bool(feedback))
         doc = extract_json(self.client.complete(self.system_prompt(d), user, self.max_tokens))
         errs = self.schemas.errors(d.artifact, doc)
