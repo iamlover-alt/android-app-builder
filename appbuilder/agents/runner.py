@@ -87,6 +87,8 @@ class AgentRunner:
 
     def run(self, d: AgentDef, inputs: dict[str, Any], feedback: list[str] | None = None) -> Any:
         user = d.build_user(inputs)
+        if inputs.get("context"):  # Memory Keeper pack: already delimited as untrusted data, cites source ids
+            user += "\n\nContext pack (each line cites its source id):\n" + str(inputs["context"])
         if feedback:
             user += ("\n\nYour previous reply was rejected. Fix every error and reply with the full corrected JSON:\n"
                      + wrap_untrusted("feedback", "\n".join(f"- {clip(e)}" for e in feedback)))
