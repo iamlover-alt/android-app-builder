@@ -10,13 +10,15 @@ markers directly above `@Test`:
     @Test fun `adds a task`() { ... }
 
 The report is built only from evidence: a criterion passes iff at least one test claims it, every
-claiming test has a JUnit XML result, and all of those passed. No result file (tests not run, fake
+claiming test has a fresh JUnit XML result, and all of those passed. (A test with an empty body still
+passes: the report proves the tests ran green, not that they assert anything meaningful.) No result file (tests not run, fake
 Gradle, androidTest without an emulator) means `passed: false` with the reason as evidence.
 """
 from __future__ import annotations
 
 import json
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -34,7 +36,7 @@ TEST_BLOCK = re.compile(
     r"(?:[ \t]*//[^\n]*\n|[ \t]*\n)*"
     r"[ \t]*@Test\b(?:\([^)\n]*\))?\s*(?:@\w+(?:\([^)\n]*\))?\s*)*"
     r"(?:\w+[ \t]+)*fun[ \t]+(?P<name>`[^`\n]+`|\w+)", re.M)
-KEY = re.compile(r"^[A-Za-z0-9_-]+#[1-9]\d*$")
+CLASS_DECL = re.compile(r"^[ \t]*(?:\w+[ \t]+)*class[ \t]+(\w+)", re.M)
 MAX_XML_BYTES = 2_000_000
 
 
@@ -57,6 +59,11 @@ class TestRef:
     source_set: str   # "test" (JVM) or "androidTest" (needs an emulator)
     cls: str
     name: str
+    pkg: str = ""
+
+    @property
+    def full_class(self) -> str:
+        return f"{self.pkg}.{self.cls}" if self.pkg else self.cls
 
 
 def criteria(prd: dict[str, Any], story_ids: list[str] | None = None) -> list[Criterion]:
@@ -84,17 +91,18 @@ def parse_tests(files: list[dict[str, str]]) -> tuple[list[TestRef], list[str]]:
         if not p.endswith(".kt"):
             continue
         pkg = re.search(r"^\s*package\s+([\w.]+)", text, re.M)
-        cls = re.search(r"^\s*(?:\w+\s+)*class\s+(\w+)", text, re.M)
+        classes = [(c.start(), c.group(1)) for c in CLASS_DECL.finditer(text)]
         sset = "androidTest" if "/src/androidTest/" in p else "test"
         claimed = 0
         for m in TEST_BLOCK.finditer(text):
             keys = MARKER.findall(m.group("markers"))
             claimed += len(keys)
-            if not (pkg and cls):
-                errs.append(f"{p}: test files need a `package` line and a `class`")
+            owner = [n for pos, n in classes if pos < m.start()]
+            if not (pkg and owner):
+                errs.append(f"{p}: test files need a `package` line and a `class` declared above each test")
                 break
             name = m.group("name").strip("`")
-            refs += [TestRef(k, p, sset, cls.group(1), name) for k in keys]
+            refs += [TestRef(k, p, sset, owner[-1], name, pkg.group(1)) for k in keys]
         if claimed != len(MARKER.findall(text)):
             errs.append(f"{p}: every `// ACCEPTANCE <story>#<n>` marker must sit directly above an @Test function")
     return refs, errs
@@ -152,23 +160,25 @@ TEST_ENGINEER = AgentDef(
 
 # ---- results and report --------------------------------------------------
 def parse_junit_dir(directory: Path) -> dict[tuple[str, str], tuple[str, str]]:
-    """(class simple name, test name) -> (status, detail) from JUnit XML files. Missing dir => {}."""
+    """(full class name, test name) -> (status, detail) from JUnit XML files. Missing dir => {}.
+
+    Untrusted input (test code can write these files): only plain ASCII-compatible XML without a DTD is
+    read; anything else is skipped. On a duplicate key a failure beats a pass."""
     out: dict[tuple[str, str], tuple[str, str]] = {}
     d = Path(directory)
-    if not d.is_dir():
+    if d.is_symlink() or not d.is_dir():
         return out
     for x in sorted(d.glob("*.xml")):
-        if x.is_symlink() or x.stat().st_size > MAX_XML_BYTES:
-            continue
-        raw = x.read_bytes()
-        if re.search(rb"<!(DOCTYPE|ENTITY)", raw):  # no DTDs: entity expansion is not our problem to solve
-            continue
         try:
+            if x.is_symlink() or not x.is_file() or x.stat().st_size > MAX_XML_BYTES:
+                continue
+            raw = x.read_bytes()
+            if b"\x00" in raw or re.search(rb"<!(DOCTYPE|ENTITY)", raw, re.I) or not re.match(rb"\s*<", raw):
+                continue  # NUL => UTF-16/32, which would hide a DTD from the check above
             root = ElementTree.fromstring(raw)
-        except ElementTree.ParseError:
+        except (OSError, ValueError, LookupError, ElementTree.ParseError):
             continue
         for tc in root.iter("testcase"):
-            cls = (tc.get("classname") or "").rsplit(".", 1)[-1]
             bad = tc.find("failure") if tc.find("failure") is not None else tc.find("error")
             if bad is not None:
                 res = ("failed", bad.get("message") or (bad.text or "").strip())
@@ -176,7 +186,9 @@ def parse_junit_dir(directory: Path) -> dict[tuple[str, str], tuple[str, str]]:
                 res = ("skipped", "")
             else:
                 res = ("passed", "")
-            out[(cls, tc.get("name") or "")] = res
+            key = (tc.get("classname") or "", tc.get("name") or "")
+            if key not in out or (res[0] == "failed" and out[key][0] != "failed"):
+                out[key] = res
     return out
 
 
@@ -204,7 +216,7 @@ def build_report(task_id: str, prd: dict[str, Any], tests: list[TestRef], result
                     ok = False
                     parts.append(f"{label}: androidTest not executed (needs an emulator)")
                     continue
-                st, detail = results.get((t.cls, t.name), ("missing", ""))
+                st, detail = results.get((t.full_class, t.name), ("missing", ""))
                 if st != "passed":
                     ok = False
                 parts.append(f"{label}: {st}" + (f" ({detail})" if detail else "")
@@ -231,9 +243,12 @@ def write_tests(runner: AgentRunner, inputs: dict[str, Any], editor: EditThenLin
 def execute_tests(inputs: dict[str, Any], refs: list[TestRef], gradle: GradleRunner, project: Path, task_id: str,
                   build_green: bool, fix_rounds: int = 0, schemas: SchemaRegistry | None = None) -> tuple[dict[str, Any], bool]:
     """Run the JVM unit tests, read JUnit XML, build the schema-checked report. Returns (report, executed)."""
+    results_dir = (Path(project) / module_dir(app_module(inputs["module_graph"]) or ":app")
+                   / "build" / "test-results" / "testDebugUnitTest")
+    if build_green:  # old XML from an earlier round must never count as evidence for this run
+        shutil.rmtree(results_dir, ignore_errors=True)
     unit = gradle.run(project, "testDebugUnitTest") if build_green else None
-    results = parse_junit_dir(Path(project) / module_dir(app_module(inputs["module_graph"]) or ":app")
-                              / "build" / "test-results" / "testDebugUnitTest")
+    results = parse_junit_dir(results_dir) if build_green else {}
     note = "" if results else "no JUnit results on disk" + (
         f"; gradle: {(unit.errors or ('failed',))[0]}" if unit is not None and not unit.ok else "")
     report = build_report(task_id, inputs["prd"], refs, results, build_green, fix_rounds, inputs.get("story_ids"), note)

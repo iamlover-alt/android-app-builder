@@ -26,7 +26,7 @@ DEFAULT_BUDGET = 3000
 
 
 def estimate_tokens(text: str) -> int:
-    """Rough upper estimate (4 chars per token, rounded up, plus line overhead). No tokenizer offline."""
+    """Rough estimate (4 chars per token, rounded up, plus line overhead); can undercount code. No tokenizer offline."""
     return -(-len(text) // 4) + 2
 
 
@@ -165,7 +165,7 @@ def select(g: ProjectGraph, agent: str, story: str | None = None, module: str | 
 
 
 def build_pack(g: ProjectGraph, agent: str, budget: int | None = None, **focus: Any) -> ContextPack:
-    budget = budget or BUDGETS.get(agent, DEFAULT_BUDGET)
+    budget = BUDGETS.get(agent, DEFAULT_BUDGET) if budget is None else budget
     seen: set[str] = set()
     claims = [c for c in select(g, agent, **focus) if not (c.source in seen or seen.add(c.source))]
     pack = ContextPack(agent, budget, claims)

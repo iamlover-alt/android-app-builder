@@ -141,9 +141,9 @@ def test_junit_parse_states_and_hostile_files(tmp_path):
     (d / "TEST-evil.xml").write_text('<!DOCTYPE x [<!ENTITY a "b">]><testsuite><testcase classname="E" name="e"/></testsuite>')
     (d / "TEST-bad.xml").write_text("<testsuite")
     r = parse_junit_dir(d)
-    assert r[("A", "ok")][0] == "passed" and r[("A", "bad")] == ("failed", "boom")
-    assert r[("A", "err")][0] == "failed" and r[("A", "skip")][0] == "skipped"
-    assert ("E", "e") not in r and parse_junit_dir(tmp_path / "nope") == {}
+    assert r[("app.A", "ok")][0] == "passed" and r[("app.A", "bad")] == ("failed", "boom")
+    assert r[("app.A", "err")][0] == "failed" and r[("app.A", "skip")][0] == "skipped"
+    assert ("E", "e") not in r and ("app.E", "e") not in r and parse_junit_dir(tmp_path / "nope") == {}
 
 
 def refs_all():
@@ -151,7 +151,7 @@ def refs_all():
 
 
 def test_report_passes_only_with_passing_results():
-    res = {("TodoAcceptanceTest", "adds a task"): ("passed", ""), ("TodoAcceptanceTest", "completes"): ("failed", "expected 1 was 0")}
+    res = {("app.TodoAcceptanceTest", "adds a task"): ("passed", ""), ("app.TodoAcceptanceTest", "completes"): ("failed", "expected 1 was 0")}
     rep = build_report("t", PRD, refs_all(), res, True)
     assert SCHEMAS.errors("test-report", rep) == []
     assert [c["passed"] for c in rep["criteria"]] == [True] * 3 + [False] * 3
@@ -160,18 +160,18 @@ def test_report_passes_only_with_passing_results():
 
 def test_report_never_passes_without_results_or_with_red_build_or_androidtest():
     assert not any(c["passed"] for c in build_report("t", PRD, refs_all(), {}, True)["criteria"])
-    ok = {("TodoAcceptanceTest", "adds a task"): ("passed", ""), ("TodoAcceptanceTest", "completes"): ("passed", "")}
+    ok = {("app.TodoAcceptanceTest", "adds a task"): ("passed", ""), ("app.TodoAcceptanceTest", "completes"): ("passed", "")}
     red = build_report("t", PRD, refs_all(), ok, False)
     assert not red["build_green"] and not any(c["passed"] for c in red["criteria"]) and "build not green" in red["criteria"][0]["evidence"]
-    ui = [TestRef(c.key, "app/src/androidTest/U.kt", "androidTest", "U", "u") for c in criteria(PRD)]
-    rep = build_report("t", PRD, ui, {("U", "u"): ("passed", "")}, True)
+    ui = [TestRef(c.key, "app/src/androidTest/U.kt", "androidTest", "U", "u", "p") for c in criteria(PRD)]
+    rep = build_report("t", PRD, ui, {("p.U", "u"): ("passed", "")}, True)
     assert not any(c["passed"] for c in rep["criteria"]) and "not executed" in rep["criteria"][0]["evidence"]
 
 
 def test_report_unclaimed_line_fails_and_secrets_are_redacted():
     rep = build_report("t", PRD, refs_all()[:3], {}, True)
     assert rep["criteria"][3]["evidence"] == "no test claims this acceptance line"
-    res = {("TodoAcceptanceTest", "adds a task"): ("failed", "token = abcdef123456")}
+    res = {("app.TodoAcceptanceTest", "adds a task"): ("failed", "token = abcdef123456")}
     ev = build_report("t", PRD, refs_all(), res, True)["criteria"][0]["evidence"]
     assert "abcdef123456" not in ev and "[redacted]" in ev
 
@@ -181,8 +181,12 @@ def test_fix_rounds_capped_by_schema():
 
 
 def test_execute_tests_reads_junit_from_app_module(tmp_path):
-    junit(tmp_path, [("TodoAcceptanceTest", "adds a task", ""), ("TodoAcceptanceTest", "completes", "")])
-    g = FakeGradle()
+    class G(FakeGradle):
+        def run(self, project, task):
+            if task == "testDebugUnitTest":
+                junit(Path(project), [("TodoAcceptanceTest", "adds a task", ""), ("TodoAcceptanceTest", "completes", "")])
+            return super().run(project, task)
+    g = G()
     rep, executed = execute_tests(inputs(), refs_all(), g, tmp_path, "verify", True)
     assert executed and all(c["passed"] for c in rep["criteria"]) and g.calls == ["testDebugUnitTest"]
     rep2, ex2 = execute_tests(inputs(), refs_all(), FakeGradle(), tmp_path / "empty", "verify", True)
@@ -415,3 +419,49 @@ def test_make_client_auto_uses_key_only_when_present(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY")
     with pytest.raises(Exception):
         b.make_client("anthropic")
+
+
+# ---- review fixes ---------------------------------------------------------------
+def test_stale_junit_results_are_deleted_before_the_run(tmp_path):
+    junit(tmp_path, [("TodoAcceptanceTest", "adds a task", ""), ("TodoAcceptanceTest", "completes", "")])  # "previous round"
+    rep, executed = execute_tests(inputs(), refs_all(), FakeGradle(), tmp_path, "verify", True)   # fake gradle writes nothing
+    assert not executed and not any(c["passed"] for c in rep["criteria"])
+
+
+def test_failure_beats_pass_for_same_simple_name_in_other_package(tmp_path):
+    d = tmp_path / "r"
+    d.mkdir()
+    (d / "a.xml").write_text('<testsuite><testcase classname="p.A" name="t"><failure message="boom"/></testcase></testsuite>')
+    (d / "b.xml").write_text('<testsuite><testcase classname="q.A" name="t"/><testcase classname="p.A" name="t"/></testsuite>')
+    r = parse_junit_dir(d)
+    assert r[("p.A", "t")][0] == "failed" and r[("q.A", "t")][0] == "passed"
+
+
+def test_tests_are_attributed_to_their_own_class():
+    src = "package p\nclass A {\n// ACCEPTANCE s1#1\n@Test fun x() {}\n}\nclass B {\n// ACCEPTANCE s1#2\n@Test fun y() {}\n}\n"
+    refs, errs = parse_tests([{"path": TPATH, "content": src}])
+    assert errs == [] and [(r.full_class, r.name) for r in refs] == [("p.A", "x"), ("p.B", "y")]
+
+
+def test_hostile_xml_files_are_skipped_not_fatal(tmp_path):
+    d = tmp_path / "r"
+    d.mkdir()
+    dtd = '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE t [<!ENTITY a "x">]><testsuite><testcase classname="p.T" name="n"><failure message="&a;"/></testcase></testsuite>'
+    (d / "u16.xml").write_bytes(dtd.encode("utf-16"))
+    (d / "enc.xml").write_text('<?xml version="1.0" encoding="bogus"?><testsuite/>')
+    (d / "dir.xml").mkdir()
+    (d / "ok.xml").write_text('<testsuite><testcase classname="p.T" name="n"/></testsuite>')
+    assert parse_junit_dir(d) == {("p.T", "n"): ("passed", "")}
+    link = tmp_path / "linked"
+    link.symlink_to(d)
+    assert parse_junit_dir(link) == {}
+
+
+def test_append_run_record_refuses_symlink(tmp_path):
+    b = spec_mod()
+    real = tmp_path / "real.md"
+    real.write_text((ROOT / "benchmark/specs/01-todo.md").read_text())
+    link = tmp_path / "01-link.md"
+    link.symlink_to(real)
+    with pytest.raises(ValueError, match="symlink"):
+        b.append_run_record(link, "| x |")

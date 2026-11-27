@@ -169,7 +169,11 @@ def append_run_record(spec_path: Path, row: str) -> None:
     if last == h:
         raise ValueError(f"{spec_path.name}: '{RECORD_HEADING}' has no table")
     lines.insert(last + 1, row)
-    spec_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if spec_path.is_symlink():
+        raise ValueError(f"{spec_path.name}: refusing to write through a symlink")
+    tmp = spec_path.with_suffix(".md.tmp")
+    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.replace(tmp, spec_path)
 
 
 def make_client(choice: str):
@@ -199,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {e}", file=sys.stderr)
         return 2
     commit = builder_commit()
-    stamp = time.strftime("%Y%m%d-%H%M%S")
+    stamp = time.strftime("%Y%m%d-%H%M%S") + f"-{os.getpid()}"
     out = Path(a.runs_dir) / stamp
     results = []
     for p in paths:
